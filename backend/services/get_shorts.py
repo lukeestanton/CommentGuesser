@@ -114,16 +114,16 @@ def get_game_round_data():
 
         comments = _get_top_comments(video_id)
 
-        if not comments or len(comments) < 4:
+        if not comments or len(comments) < 2:
             continue
 
         top_comment = comments[0]
         distractor_pool = [comment for comment in comments[1:] if comment["text"].strip()]
 
-        if len(distractor_pool) < 3:
+        if len(distractor_pool) < 1:
             continue
 
-        distractors = random.sample(distractor_pool, 3)
+        distractors = random.sample(distractor_pool, 1)
         options = distractors + [top_comment]
         random.shuffle(options)
 

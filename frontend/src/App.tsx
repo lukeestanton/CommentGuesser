@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import './App.css'
 
@@ -24,11 +24,39 @@ type GuessResult = {
   options: RevealedOption[]
 }
 
+type YTPlayer = {
+  destroy: () => void
+  getDuration: () => number
+  getCurrentTime: () => number
+}
+
+type YTPlayerOptions = {
+  videoId: string
+  height: string
+  width: string
+  playerVars?: Record<string, number>
+  events?: {
+    onReady?: (event: { target: YTPlayer }) => void
+  }
+}
+
+type YTNamespace = {
+  Player: new (element: HTMLElement | string, options: YTPlayerOptions) => YTPlayer
+}
+
+declare global {
+  interface Window {
+    YT?: YTNamespace
+    onYouTubeIframeAPIReady?: () => void
+  }
+}
+
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 
 const GET_ROUND_ENDPOINT = `${API_BASE_URL}/api/get-game-round`
 const SUBMIT_GUESS_ENDPOINT = `${API_BASE_URL}/api/submit-guess`
+const SCORE_BASE = 100
 
 const formatLikes = (value: number) =>
   new Intl.NumberFormat('en-US', {
@@ -36,21 +64,18 @@ const formatLikes = (value: number) =>
     maximumFractionDigits: 1,
   }).format(value)
 
-const getEmbedUrl = (url: string) => {
+const getVideoId = (url: string) => {
   try {
     const parsed = new URL(url)
-    const videoId =
+    return (
       parsed.searchParams.get('v') ??
-      parsed.pathname.split('/').filter(Boolean).pop()
-
-    if (videoId) {
-      return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&enablejsapi=1`
-    }
+      parsed.pathname.split('/').filter(Boolean).pop() ??
+      null
+    )
   } catch (err) {
-    console.error('Failed to build embed url', err)
+    console.error('Failed to parse video id', err)
+    return null
   }
-
-  return url
 }
 
 function App() {
@@ -61,6 +86,12 @@ function App() {
   const [isSubmittingGuess, setIsSubmittingGuess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [streak, setStreak] = useState(0)
+  const [score, setScore] = useState(0)
+  const [lastRoundScore, setLastRoundScore] = useState<number | null>(null)
+  const [isPlayerApiReady, setIsPlayerApiReady] = useState(false)
+  const [isPlayerReady, setIsPlayerReady] = useState(false)
+  const playerRef = useRef<YTPlayer | null>(null)
+  const playerContainerRef = useRef<HTMLDivElement | null>(null)
 
   const fetchRound = useCallback(async (signal?: AbortSignal) => {
     setIsLoadingRound(true)
@@ -116,12 +147,87 @@ function App() {
     return () => controller.abort()
   }, [fetchRound])
 
-  const embedUrl = useMemo(
-    () => (gameRound ? getEmbedUrl(gameRound.videoLink) : ''),
+  const videoId = useMemo(
+    () => (gameRound ? getVideoId(gameRound.videoLink) : null),
     [gameRound],
   )
 
   const isInitialLoading = isLoadingRound && !gameRound && !error
+
+  useEffect(() => {
+    setIsPlayerReady(false)
+    if (playerRef.current) {
+      playerRef.current.destroy()
+      playerRef.current = null
+    }
+  }, [videoId])
+
+  useEffect(() => {
+    if (window.YT?.Player) {
+      setIsPlayerApiReady(true)
+      return
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://www.youtube.com/iframe_api"]',
+    )
+
+    if (existingScript) {
+      const handleReady = () => setIsPlayerApiReady(true)
+      window.onYouTubeIframeAPIReady = handleReady
+      return
+    }
+
+    const handleReady = () => {
+      setIsPlayerApiReady(true)
+    }
+
+    window.onYouTubeIframeAPIReady = handleReady
+
+    const script = document.createElement('script')
+    script.src = 'https://www.youtube.com/iframe_api'
+    script.async = true
+    document.body.appendChild(script)
+
+    return () => {
+      if (window.onYouTubeIframeAPIReady === handleReady) {
+        delete window.onYouTubeIframeAPIReady
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isPlayerApiReady || !videoId || !playerContainerRef.current) {
+      return
+    }
+
+    playerContainerRef.current.innerHTML = ''
+
+    const player = new window.YT!.Player(playerContainerRef.current, {
+      height: '100%',
+      width: '100%',
+      videoId,
+      playerVars: {
+        modestbranding: 1,
+        rel: 0,
+        playsinline: 1,
+        // controls: 0,
+        // disablekb: 1,
+      },
+      events: {
+        onReady: () => {
+          setIsPlayerReady(true)
+        },
+      },
+    })
+
+    playerRef.current = player
+
+    return () => {
+      player.destroy()
+      playerRef.current = null
+    }
+  }, [isPlayerApiReady, videoId])
 
   const handleOptionSelect = (commentId: string) => {
     if (isLoadingRound || isSubmittingGuess || guessResult) {
@@ -163,8 +269,34 @@ function App() {
       }
 
       const data = payload as GuessResult
-      setStreak((prev) => (data.isCorrect ? prev + 1 : 0))
       setGuessResult(data)
+
+      const duration = playerRef.current?.getDuration() ?? 0
+      const currentTime = playerRef.current?.getCurrentTime() ?? 0
+      const remaining = Math.max(duration - currentTime, 0)
+      const ratio = duration > 0 ? remaining / duration : 1
+      // Bucketize remaining time into 0..10 (in increments of 10%), higher is faster
+      const timeLeftBuckets = Math.max(0, Math.min(10, Math.floor(ratio * 10)))
+      const sortedByLikes = [...data.options].sort((a, b) => b.likes - a.likes)
+      const rank =
+        sortedByLikes.findIndex((option) => option.commentId === data.selectedOptionId) + 1
+      const isTop = rank === 1
+
+      const nextStreak = isTop ? streak + 1 : 0
+      setStreak(nextStreak)
+
+      const roundScore = isTop
+        ? Math.round(SCORE_BASE * (1.1 * nextStreak + 1.1 * timeLeftBuckets))
+        : 0
+      const normalizedRoundScore = roundScore || 0
+
+      if (isTop) {
+        setScore((prev) => prev + normalizedRoundScore)
+        setLastRoundScore(normalizedRoundScore)
+      } else {
+        setScore(0)
+        setLastRoundScore(0)
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Something went wrong. Please try again.'
@@ -196,20 +328,39 @@ function App() {
       <div className="page-shell__glow page-shell__glow--two" />
       <main className="layout">
         <header className="masthead">
-          <span className="masthead__eyebrow">Comment Guesser</span>
-          <h1 className="masthead__title">Guess the comment fans loved most</h1>
-          <p className="masthead__body">
-            Watch a trending short, study the contenders, and lock in the reply you think pulled in
-            the most likes.
-          </p>
-          <div
-            className={`streak-card ${streak > 0 ? 'streak-card--active' : ''}`}
-            role="status"
-            aria-live="polite"
-          >
-            <span className="streak-card__label">Current streak</span>
-            <span className="streak-card__value">{streak}</span>
+          <div className="masthead__intro">
+            <span className="masthead__eyebrow">Comment Guesser</span>
+            <h1 className="masthead__title">Guess the Top Comment</h1>
           </div>
+          <aside className="masthead__scoreboard" aria-label="Live stats">
+            <div className="scoreboard__header">
+              <span>Live scorecard</span>
+            </div>
+            <div className="status-cards">
+              <div
+                className={`streak-card ${streak > 0 ? 'streak-card--active' : ''}`}
+                role="status"
+                aria-live="polite"
+              >
+                <span className="streak-card__label">Current streak</span>
+                <span className="streak-card__value">{streak}</span>
+              </div>
+              <div className="score-card" role="status" aria-live="polite">
+                <span className="score-card__label">Total score</span>
+                <span className="score-card__value">{score}</span>
+                {lastRoundScore !== null && (
+                  <span
+                    className={`score-card__delta ${
+                      lastRoundScore >= 0 ? 'score-card__delta--positive' : 'score-card__delta--negative'
+                    }`}
+                  >
+                    {lastRoundScore >= 0 ? '+' : ''}
+                    {lastRoundScore}
+                  </span>
+                )}
+              </div>
+            </div>
+          </aside>
         </header>
 
         {error && (
@@ -234,17 +385,12 @@ function App() {
             <article className="surface surface--video">
               <div className="surface__header">
                 <h2>Featured short</h2>
-                <p>Soak in the context before you make your pick.</p>
               </div>
               <div className="video-frame">
-                {embedUrl ? (
-                  <iframe
-                    key={embedUrl}
-                    src={embedUrl}
-                    title="YouTube video player"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    loading="lazy"
+                {videoId ? (
+                  <div
+                    ref={playerContainerRef}
+                    className={`video-frame__player ${isPlayerReady ? '' : 'video-frame__player--loading'}`}
                   />
                 ) : (
                   <div className="video-frame__fallback">
@@ -262,8 +408,7 @@ function App() {
             <article className="surface surface--choices">
               <form className="choices-form" onSubmit={handleSubmitGuess}>
                 <div className="surface__header">
-                  <h2>The contenders</h2>
-                  <p>Only one of these comments claimed the crown.</p>
+                  <h2>Guess</h2>
                 </div>
 
                 <div className="choices-grid">
