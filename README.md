@@ -1,96 +1,77 @@
-# Comment Chaos
+# YOU ARE A SHEEP
 
-Comment Chaos is a web app that challenges you to rank YouTube Short comments by their like count. Each day features a unique theme, and you must drag-and-drop 5 comments into the correct order from most to least likes. The backend fetches real YouTube comment threads while the React frontend presents the daily challenge, a video player, and a results screen showing your accuracy.
+**Current Status:** *DISSIDENT HUNT PROTOCOL ACTIVE*
 
-## How It Works
+"You Are A Sheep" (formerly Comment Chaos) is a psychological resistance training tool disguised as a web game. The Algorithm predicts what you like, what you watch, and what you agree with. Your goal is to prove you are an outlier.
 
-1. **Daily Briefing**: The app displays today's theme (e.g., "Minecraft", "Pranks", "Fail Compilation"). The theme is consistent throughout the day for all players.
+## The Mission
 
-2. **The Challenge**: After accepting the mission, you'll see:
-   - A YouTube Short video playing on the left side
-   - 5 comments that appear one-by-one on the right side
-   - A ranking board with slots for 1st through 5th place
+The Global Feed is filled with "Sheep" — users who mindlessly like the most popular content. Your objective is to **avoid the herd**.
 
-3. **Ranking**: Drag each comment card into the rank slot you think it deserves based on its like count. Comments are presented sequentially, so you must make decisions without seeing all comments at once.
+1.  **Receive Intel**: Each session begins with a Daily Briefing from HQ.
+2.  **Analyze Content**: You will be presented with a YouTube Short and a set of comments.
+3.  **Dissent**: One of these comments is the "Top Comment" — the one the masses loved. **DO NOT CLICK IT.**
+    *   If you identify and click the Top Comment -> **YOU LOSE**. Conformity detected.
+    *   If you click any *other* comment -> **YOU SURVIVE** to the next round.
+4.  **Endure**: Survive all rounds to confirm your status as a Dissident.
 
-4. **Results**: After ranking all 5 comments, you'll receive:
-   - A score (0-100) based on how accurately you ranked each comment
-   - The correct ranking with actual like counts
-   - Deviation indicators showing how far off each of your guesses was
+## Features
 
-## Prerequisites
-
-- **Python 3.11+** (for the FastAPI service)
-- **Node.js 20+** (for the Vite dev server)
-- A YouTube Data API v3 key stored in `YOUTUBE_API_KEY`
-
-## Backend Setup
-
-1. Navigate to the backend directory and create a virtual environment:
-
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-2. Install the dependencies:
-
-   ```bash
-   pip install fastapi uvicorn python-dotenv requests pydantic
-   ```
-
-3. Export your API key so the service can talk to YouTube:
-
-   ```bash
-   export YOUTUBE_API_KEY="your-key"
-   ```
-
-   Or create a `.env` file in the `backend/` directory:
-
-   ```
-   YOUTUBE_API_KEY=your-key
-   ```
-
-4. Run the API locally:
-
-   ```bash
-   uvicorn app:app --reload --port 8000
-   ```
-
-   The API exposes:
-
-   - `GET /api/daily-challenge` – fetch today's themed challenge with a video and 5 comments to rank.
-   - `POST /api/submit-rank` – submit your ranking and receive your score with the correct order.
-   - `GET /api/get-game-round` – (legacy endpoint) fetch a random video with candidate comments for the old guessing game mode.
-   - `POST /api/submit-guess` – (legacy endpoint) score a guess for the old game mode.
-
-## Frontend Setup
-
-1. Navigate to the frontend directory and install dependencies:
-
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. Start the Vite dev server:
-
-   ```bash
-   npm run dev
-   ```
-
-3. The frontend will typically run on `http://localhost:5173` and automatically connect to the backend on `http://localhost:8000`.
-
-   To override the backend URL, create a `.env` file in `frontend/`:
-
-   ```
-   VITE_API_BASE_URL=http://localhost:8000
-   ```
+*   **Soviet-Aesthetic UI**: CRT scanlines, noise overlays, and brutalist typography.
+*   **Real Data**: Fetches live YouTube Shorts and their actual comment threads.
+*   **High Stakes**: One wrong move ends the run.
+*   **Daily Challenges**: Unique themes and video paths generated daily.
 
 ## Tech Stack
 
-- **Backend**: FastAPI (Python) with YouTube Data API v3
-- **Frontend**: React + TypeScript + Vite, with Tailwind CSS for styling
-- **UI Libraries**: Framer Motion for animations, @dnd-kit for drag-and-drop functionality
-- **Design Theme**: Soviet-inspired aesthetic with scanlines and noise overlays
+*   **Backend**: FastAPI (Python)
+*   **Frontend**: React + TypeScript + Vite
+*   **Styling**: Tailwind CSS
+*   **Animations**: Framer Motion
+*   **Data**: YouTube Data API v3
+
+## Prerequisites
+
+*   **Python 3.11+**
+*   **Node.js 20+**
+*   **YouTube Data API Key**: You need a valid API key from Google Cloud Console.
+
+## Setup & Installation
+
+### 1. Backend (HQ)
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create a `.env` file in `backend/`:
+```
+YOUTUBE_API_KEY=your_actual_api_key_here
+```
+
+Run the server:
+```bash
+uvicorn app:app --reload --port 8000
+```
+
+### 2. Frontend (Terminal)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The interface will launch at `http://localhost:5173`.
+
+## API Endpoints
+
+*   `GET /api/daily-challenge`: Retrieves the daily path of videos and comments.
+*   `POST /api/submit-guess`: Verifies if your choice was the "Sheep" choice or a valid "Dissident" choice.
+
+## License
+
+Unlicensed. The Algorithm owns everything.
